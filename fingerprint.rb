@@ -3,7 +3,7 @@ require 'curb'
 require 'optparse'
 
 class Fingerprint
-  attr_reader :headers
+  attr_reader :body, :headers
 
   # Use regexes for server types and versions
   IIS = /Microsoft-IIS\/([\d\.]+)/i
@@ -15,6 +15,7 @@ class Fingerprint
   # we need to do this ourselves from the header_str using regexes.
   def initialize(url)
     curl = Curl::Easy.http_get(url)
+    @body = curl.body_str
     response, *headers = curl.header_str.split(/[\r\n]+/).map(&:strip)
     @headers = Hash[headers.flat_map{ |s| s.scan(/^(\S+): (.+)/) }]
   end
@@ -23,6 +24,11 @@ class Fingerprint
     return "IIS" if @headers["Server"].match(IIS)
     return "NGINX" if @headers["Server"].match(NGINX)
     @headers["Server"].capitalize
+  end
+
+  # Seems like web directory listings always have this link near the top
+  def directory_listable?
+    @body.match(/\[To Parent Directory\]<\/A>/i)
   end
 
   # Dynamically determine server version if we have a regex to match with.
@@ -52,16 +58,18 @@ if urls.empty?
   exit
 end
 
-iis_v70 = []
-nginx_v12 = []
-
+# Print URLs (and whether they are directory listable) that are:
+#   NGINX version 1.2 or IIS version 7.0
 urls.each do |url|
   fingerprint = Fingerprint.new(url)
   vendor = fingerprint.vendor
   version = fingerprint.send("#{vendor}_version".to_sym)
-  iis_v70 << url if vendor == "IIS" and version =~ /^7\.0/
-  nginx_v12 << url if vendor == "NGINX" and version =~ /^1\.2/
+  directory_listable = fingerprint.directory_listable? ? "Directory listable - " : " "
+  if vendor == "IIS" and version =~ /^7\.0/
+    puts "IIS version 7.0 - " + directory_listable + url
+  elsif vendor == "NGINX" and version =~ /^1\.2/
+    puts "NGINX version 1.2 - " + directory_listable + url
+  end
 end
 
-puts iis_v70.inspect
-puts nginx_v12.inspect
+
