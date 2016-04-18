@@ -17,7 +17,7 @@ ARGV.options do |opts|
 end
 urls = CSV.read(file).flatten if file
 if urls.empty?
-  puts "A list of URLs or IP addresses is required to run." if urls.empty?
+  puts "A list of URLs or IP addresses is required to run."
   exit
 end
 
